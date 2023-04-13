@@ -1,0 +1,33 @@
+name: Go Spanner Emulator Sample Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Sample Go Test
+    runs-on: ubuntu-latest
+
+    container:
+      image: golang:1.19
+
+    services:
+      spanner-emulator:
+        image: gcr.io/cloud-spanner-emulator/emulator:latest
+        ports:
+          - 9010:9010
+          - 9020:9020
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      - name: setup go
+        run: go mod download
+
+      - name: run test
+        env:
+          SPANNER_EMULATOR_HOST: spanner-emulator:9010
+        run: go test ./...
