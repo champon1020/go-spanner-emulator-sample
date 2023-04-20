@@ -8,9 +8,12 @@ import (
 	"sync"
 
 	databaseadmin "cloud.google.com/go/spanner/admin/database/apiv1"
+	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	instanceadmin "cloud.google.com/go/spanner/admin/instance/apiv1"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/iterator"
+	databaseadminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
 	instanceadminpb "google.golang.org/genproto/googleapis/spanner/admin/instance/v1"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -28,6 +31,8 @@ var (
 			return &h
 		},
 	}
+
+	DumpDatabases = newDumpDatabases()
 )
 
 func getDatabaseName(hashOrigin string) string {
@@ -78,12 +83,6 @@ type dumpDatabases struct {
 	databases map[string]struct{}
 }
 
-func newDumpDatabases() *dumpDatabases {
-	return &dumpDatabases{
-		databases: make(map[string]struct{}),
-	}
-}
-
 func DropDatabases() error {
 	ctx := context.Background()
 	client, err := databaseadmin.NewDatabaseAdminClient(ctx)
@@ -92,7 +91,7 @@ func DropDatabases() error {
 	}
 	defer client.Close()
 
-	iterator := client.ListDatabases(ctx, &databaseadminpb.ListDatabasesRequest{
+	iter := client.ListDatabases(ctx, &databaseadminpb.ListDatabasesRequest{
 		Parent: fmt.Sprintf("projects/%s/instances/%s", testProjectName, testInstanceName),
 	})
 
@@ -100,12 +99,67 @@ func DropDatabases() error {
 	// ref: https://cloud.google.com/spanner/quotas#database-limits
 	databases := make([]*databaseadminpb.Database, 0, 100)
 	for {
-		database, err := iterator.Next()
-		if err == iterator.Done() {
+		database, err := iter.Next()
+		if err == iterator.Done {
 			break
 		}
 		if err != nil {
 			return fmt.Errorf("iterator error: %w", err)
 		}
+		if DumpDatabases.Contains(database.Name) {
+			databases = append(databases, database)
+			DumpDatabases.Delete(database.Name)
+		}
 	}
+
+	eg := new(errgroup.Group)
+	for _, db := range databases {
+		db := db
+		eg.Go(func() error {
+			if err := client.DropDatabase(ctx, &databasepb.DropDatabaseRequest{Database: db.Name}); err != nil {
+				return fmt.Errorf("failed to drop database, database=%s: %w", db.Name, err)
+			}
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return fmt.Errorf("failed to wait operations: %w", err)
+	}
+
+	return nil
+}
+
+func newDumpDatabases() *dumpDatabases {
+	return &dumpDatabases{
+		databases: make(map[string]struct{}),
+	}
+}
+
+func (d *dumpDatabases) handleWithHashPool(database string, f func(*maphash.Hash)) {
+	d.Lock()
+	h := hashPool.Get().(*maphash.Hash)
+	h.WriteString(database)
+	f(h)
+	h.Reset()
+	d.Unlock()
+}
+
+func (d *dumpDatabases) Add(database string) {
+	d.handleWithHashPool(database, func(h *maphash.Hash) {
+		d.databases[fmt.Sprintf("db_%x", h.Sum64())] = struct{}{}
+	})
+}
+
+func (d *dumpDatabases) Delete(database string) {
+	d.handleWithHashPool(database, func(h *maphash.Hash) {
+		delete(d.databases, fmt.Sprintf("db_%x", h.Sum64()))
+	})
+}
+
+func (d *dumpDatabases) Contains(database string) bool {
+	var ok bool
+	d.handleWithHashPool(database, func(h *maphash.Hash) {
+		_, ok = d.databases[fmt.Sprintf("db_%x", h.Sum64())]
+	})
+	return ok
 }

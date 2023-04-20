@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"cloud.google.com/go/spanner"
-
 	databaseadmin "cloud.google.com/go/spanner/admin/database/apiv1"
 	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
 )
@@ -93,4 +92,16 @@ func (c *Client) parseSchemaToStatements(schemaPath string) ([]string, error) {
 	return statements, nil
 }
 
-func (c *Client) TruncateTables() {}
+func (c *Client) TruncateTables(tables ...string) error {
+	mu := make([]*spanner.Mutation, len(tables))
+	for i, table := range tables {
+		mu[i] = spanner.Delete(table, spanner.AllKeys())
+	}
+
+	ctx := context.Background()
+	if _, err := c.Client.Apply(ctx, mu, spanner.ApplyAtLeastOnce()); err != nil {
+		return fmt.Errorf("failed to apply: %w", err)
+	}
+
+	return nil
+}
