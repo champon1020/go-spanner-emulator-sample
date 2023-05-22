@@ -1,5 +1,0 @@
-CREATE TABLE Users (
-       ID INT64 NOT NULL,
-       Name STRING(128) NOT NULL,
-       Age INT64 NOT NULL,
-) PRIMARY KEY(ID);
