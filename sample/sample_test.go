@@ -2,6 +2,7 @@ package sample_test
 
 import (
 	"context"
+	"log"
 	"testing"
 
 	"cloud.google.com/go/spanner"
@@ -20,7 +21,9 @@ type User struct {
 func TestSample1(t *testing.T) {
 	client := testutil.NewTestClient(t, &spanner.ClientConfig{})
 	t.Cleanup(func() {
-		testutil.DumpDatabases.Add(t.Name())
+		if err := client.DropDatabase(); err != nil {
+			log.Fatal(err)
+		}
 		client.Close()
 	})
 	if err := client.CreateDatabase("./schemas/users.sql"); err != nil {
@@ -116,7 +119,9 @@ type Item struct {
 func TestSample2(t *testing.T) {
 	client := testutil.NewTestClient(t, &spanner.ClientConfig{})
 	t.Cleanup(func() {
-		testutil.DumpDatabases.Add(t.Name())
+		if err := client.DropDatabase(); err != nil {
+			log.Fatal(err)
+		}
 		client.Close()
 	})
 	if err := client.CreateDatabase("./schemas/items.sql"); err != nil {

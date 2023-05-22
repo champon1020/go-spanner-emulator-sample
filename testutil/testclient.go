@@ -10,7 +10,8 @@ import (
 
 	"cloud.google.com/go/spanner"
 	databaseadmin "cloud.google.com/go/spanner/admin/database/apiv1"
-	adminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
+	"cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
+	databaseadminpb "google.golang.org/genproto/googleapis/spanner/admin/database/v1"
 )
 
 type Client struct {
@@ -18,6 +19,14 @@ type Client struct {
 
 	databaseName   string
 	databaseClient *databaseadmin.DatabaseAdminClient
+}
+
+func getDatabaseName(suffix string) string {
+	return fmt.Sprintf("db_%x", suffix)
+}
+
+func fullDatabaseName(databaseName string) string {
+	return fmt.Sprintf("projects/%s/instances/%s/databases/%s", testProjectName, testInstanceName, databaseName)
 }
 
 func NewTestClient(tb testing.TB, spannerConfig *spanner.ClientConfig) *Client {
@@ -49,10 +58,8 @@ func (c *Client) CreateDatabase(schemaPath string) error {
 		return fmt.Errorf("failed to parse schema file: %w", err)
 	}
 
-	// os.Exit(1)
-
 	ctx := context.Background()
-	op, err := c.databaseClient.CreateDatabase(ctx, &adminpb.CreateDatabaseRequest{
+	op, err := c.databaseClient.CreateDatabase(ctx, &databaseadminpb.CreateDatabaseRequest{
 		Parent:          fmt.Sprintf("projects/%s/instances/%s", testProjectName, testInstanceName),
 		CreateStatement: fmt.Sprintf("CREATE DATABASE `%s`", c.databaseName),
 		ExtraStatements: statements,
@@ -90,6 +97,14 @@ func (c *Client) parseSchemaToStatements(schemaPath string) ([]string, error) {
 	}
 
 	return statements, nil
+}
+
+func (c *Client) DropDatabase() error {
+	ctx := context.Background()
+	if err := c.databaseClient.DropDatabase(ctx, &databasepb.DropDatabaseRequest{Database: fullDatabaseName(c.databaseName)}); err != nil {
+		return fmt.Errorf("failed to drop database, database=%s: %w", c.databaseName, err)
+	}
+	return nil
 }
 
 func (c *Client) TruncateTables(tables ...string) error {
