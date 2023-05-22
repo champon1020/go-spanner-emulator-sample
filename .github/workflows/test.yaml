@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     name: Sample Go Test
+    runs-on: ubuntu-latest
 
     container:
       image: golang:1.20
