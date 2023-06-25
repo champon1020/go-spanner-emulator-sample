@@ -1,6 +1,6 @@
 # Spanner Emulatorを用いたGoのテスト実装
 
-「Spanner Emulatorを用いたGoのテスト実装」のサンプルコード。
+「[Spanner Emulatorを用いたGoのテスト実装](https://gihyo.jp/article/2023/06/tukinami-go-08?summary)」のサンプルコード。
 
 ## Run Spanner Emulator
 
